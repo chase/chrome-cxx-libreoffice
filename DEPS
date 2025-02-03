@@ -33,10 +33,10 @@ vars = {
   'gn_version': 'git_revision:ed1abc107815210dc66ec439542bee2f6cbabc00',
 
   'llvm_url': 'https://chromium.googlesource.com/external/github.com/llvm/llvm-project/',
-  'llvm_revision': '3c51ea3619e488db19cd26840ed46d58cfc7062f',
+  'llvm_revision': 'af7f483a9d801252247b6c72e3763c1f55c5a506',
 
   'lldb_eval_url': 'https://chromium.googlesource.com/external/github.com/google/lldb-eval.git',
-  'lldb_eval_revision': 'e87123a7e639bf1d86f24c37079570fb7fa00b72',
+  'lldb_eval_revision': '323d48f0b06d7dcf6ed70cdde17b42285450a32a',
 
   # ninja CIPD package version.
   # https://chrome-infra-packages.appspot.com/p/infra/3pp/tools/ninja

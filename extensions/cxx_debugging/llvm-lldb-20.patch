@@ -1,0 +1,76 @@
+diff --git a/lldb/include/lldb/API/SBFile.h b/lldb/include/lldb/API/SBFile.h
+index ebdc5607b794..785caa75f91b 100644
+--- a/lldb/include/lldb/API/SBFile.h
++++ b/lldb/include/lldb/API/SBFile.h
+@@ -13,6 +13,12 @@
+ 
+ #include <cstdio>
+ 
++// Emscripten patch
++#ifndef FILE
++struct _IO_FILE;
++typedef struct _IO_FILE FILE;
++#endif
++
+ namespace lldb {
+ 
+ class LLDB_API SBFile {
+diff --git a/lldb/include/lldb/API/SBFrame.h b/lldb/include/lldb/API/SBFrame.h
+index 3635ee5a537a..100605964d90 100644
+--- a/lldb/include/lldb/API/SBFrame.h
++++ b/lldb/include/lldb/API/SBFrame.h
+@@ -217,6 +217,8 @@ public:
+   ///   An error object with an error message in case of failures.
+   SBError GetDescriptionWithFormat(const SBFormat &format, SBStream &output);
+ 
++  SBFrame(const lldb::StackFrameSP &lldb_object_sp);
++
+ protected:
+   friend class SBBlock;
+   friend class SBExecutionContext;
+@@ -227,8 +229,6 @@ protected:
+   friend class lldb_private::python::SWIGBridge;
+   friend class lldb_private::lua::SWIGBridge;
+ 
+-  SBFrame(const lldb::StackFrameSP &lldb_object_sp);
+-
+   lldb::StackFrameSP GetFrameSP() const;
+ 
+   void SetFrameSP(const lldb::StackFrameSP &lldb_object_sp);
+diff --git a/lldb/include/lldb/API/SBTarget.h b/lldb/include/lldb/API/SBTarget.h
+index 9b97359d49cf..7a947088d011 100644
+--- a/lldb/include/lldb/API/SBTarget.h
++++ b/lldb/include/lldb/API/SBTarget.h
+@@ -946,6 +946,8 @@ public:
+   ///     An error if a Trace already exists or the trace couldn't be created.
+   lldb::SBTrace CreateTrace(SBError &error);
+ 
++  SBTarget(const lldb::TargetSP &target_sp);
++
+ protected:
+   friend class SBAddress;
+   friend class SBAddressRange;
+@@ -970,11 +972,6 @@ protected:
+ 
+   friend class lldb_private::python::SWIGBridge;
+ 
+-  // Constructors are private, use static Target::Create function to create an
+-  // instance of this class.
+-
+-  SBTarget(const lldb::TargetSP &target_sp);
+-
+   lldb::TargetSP GetSP() const;
+ 
+   void SetSP(const lldb::TargetSP &target_sp);
+diff --git a/llvm/include/llvm-c/Types.h b/llvm/include/llvm-c/Types.h
+index 4681500ef9da..5c241459f382 100644
+--- a/llvm/include/llvm-c/Types.h
++++ b/llvm/include/llvm-c/Types.h
+@@ -14,6 +14,7 @@
+ #ifndef LLVM_C_TYPES_H
+ #define LLVM_C_TYPES_H
+ 
++#include "llvm/Support/Compiler.h"
+ #include "llvm-c/DataTypes.h"
+ #include "llvm-c/ExternC.h"
+ 

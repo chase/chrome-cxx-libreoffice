@@ -17,6 +17,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <optional>
 
 namespace symbols_backend {
 namespace api {
@@ -111,7 +112,7 @@ class WasmModule {
   lldb::VariableSP FindVariableAtOffset(lldb::addr_t offset,
                                         int inline_frame_index,
                                         llvm::StringRef name) const;
-  llvm::Optional<lldb_private::CompilerType> FindType(
+  std::optional<lldb_private::CompilerType> FindType(
       llvm::StringRef name) const;
 
   llvm::Expected<ExpressionResult> InterpretExpression(

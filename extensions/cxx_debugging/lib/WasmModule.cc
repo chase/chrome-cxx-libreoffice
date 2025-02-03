@@ -11,7 +11,7 @@
 #include "lldb/Core/Address.h"
 #include "lldb/Core/AddressRange.h"
 #include "lldb/Core/Debugger.h"
-#include "lldb/Core/FileSpecList.h"
+#include "lldb/Utility/FileSpecList.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/Section.h"
 #include "lldb/Symbol/Block.h"
@@ -34,7 +34,6 @@
 #include "lldb/Utility/Log.h"
 #include "lldb/lldb-enumerations.h"
 #include "lldb/lldb-forward.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Error.h"
@@ -49,6 +48,7 @@
 #include <functional>
 #include <memory>
 #include <tuple>
+#include <optional>
 
 #define DEBUG_TYPE "symbols-backend"
 
@@ -72,7 +72,7 @@ struct less<symbols_backend::Variable> {
 }  // namespace std
 
 namespace {
-static llvm::StringRef GetDWOName(DWARFCompileUnit& dwarf_cu) {
+static llvm::StringRef GetDWOName(lldb_private::plugin::dwarf::DWARFCompileUnit& dwarf_cu) {
   return dwarf_cu.GetUnitDIEOnly().GetDIE()->GetAttributeValueAsString(
       &dwarf_cu, lldb_private::dwarf::DW_AT_dwo_name, nullptr);
 }
@@ -142,7 +142,8 @@ SourceInfo WasmModule::GetSourceScripts() const {
   llvm::SmallSet<std::pair<llvm::StringRef, llvm::StringRef>, 1> all_files;
   for (size_t idx = 0; idx < module_->GetNumCompileUnits(); idx++) {
     auto compile_unit = module_->GetCompileUnitAtIndex(idx);
-    for (auto f : compile_unit->GetSupportFiles()) {
+    for (auto sf : compile_unit->GetSupportFiles()) {
+      auto f = sf->GetSpecOnly();
       auto dir = f.GetDirectory().GetStringRef();
       auto filename = f.GetFilename().GetStringRef();
       if (filename.empty()) {
@@ -155,8 +156,8 @@ SourceInfo WasmModule::GetSourceScripts() const {
     }
 
     // Cast user data to DwarfUnit
-    DWARFCompileUnit* dwarf_cu =
-        static_cast<DWARFCompileUnit*>(compile_unit->GetUserData());
+    lldb_private::plugin::dwarf::DWARFCompileUnit* dwarf_cu =
+        static_cast<lldb_private::plugin::dwarf::DWARFCompileUnit*>(compile_unit->GetUserData());
     if (dwarf_cu && dwarf_cu->GetVersion() >= 5) {
       // Might need to lazy load this .dwo (only works for DWARF5)
       llvm::SmallVector<std::string, 2> missing_symbols;
@@ -256,16 +257,16 @@ lldb::VariableSP WasmModule::FindVariableAtOffset(lldb::addr_t offset,
   return {};
 }
 
-llvm::Optional<lldb_private::CompilerType> WasmModule::FindType(
+std::optional<lldb_private::CompilerType> WasmModule::FindType(
     llvm::StringRef name) const {
-  lldb_private::TypeList type_list;
-  llvm::DenseSet<lldb_private::SymbolFile*> searched_symbol_files;
-  module_->FindTypes(lldb_private::ConstString(name), true, 1,
-                     searched_symbol_files, type_list);
-  if (!type_list.Empty()) {
-    return type_list.GetTypeAtIndex(0)->GetFullCompilerType();
+  lldb_private::TypeResults results;
+  lldb_private::TypeQuery query(name);
+  module_->FindTypes(query, results);
+  lldb::TypeSP type = results.GetFirstType();
+  if (type) {
+    return type->GetFullCompilerType();
   }
-  return llvm::None;
+  return std::nullopt;
 }
 
 llvm::SmallSet<SourceLocation, 1> WasmModule::GetSourceLocationFromOffset(
@@ -280,7 +281,7 @@ llvm::SmallSet<SourceLocation, 1> WasmModule::GetSourceLocationFromOffset(
       lldb::eSymbolContextBlock | lldb::eSymbolContextLineEntry, sc, addr);
   if ((resolved & lldb::eSymbolContextLineEntry) && sc.line_entry.IsValid() &&
       sc.line_entry.line > 0) {
-    lines.insert({sc.line_entry.file.GetPath(), sc.line_entry.line,
+    lines.insert({sc.line_entry.file_sp->GetSpecOnly().GetPath(), sc.line_entry.line,
                   sc.line_entry.column});
   }
   return lines;
@@ -303,7 +304,7 @@ std::vector<int32_t> WasmModule::GetMappedLines(
     // Gather all line entries for the compile_unit
     lldb_private::LineTable* table = compile_unit->GetLineTable();
     while (file_idx != UINT32_MAX) {
-      table->FineLineEntriesForFileIndex(file_idx, true, line_entry_scs);
+      table->FindLineEntriesForFileIndex(file_idx, true, line_entry_scs);
       file_idx = compile_unit->GetSupportFiles().FindFileIndex(file_idx + 1,
                                                                file_spec, true);
     }
@@ -381,7 +382,7 @@ WasmModule::GetOffsetFromSourceLocation(
 
       // Include any line 0 entries, they indicate that this is compiler-
       // generated code that does not correspond to user source code.
-      if (next_sc.line_entry.original_file != sc.line_entry.original_file ||
+      if (next_sc.line_entry.original_file_sp != sc.line_entry.original_file_sp ||
           (next_sc.line_entry.line != sc.line_entry.line &&
            next_sc.line_entry.line != 0)) {
         break;
@@ -445,8 +446,8 @@ FunctionInfo WasmModule::GetFunctionInfo(lldb::addr_t offset) const {
     // Compile unit might be missing symbols?
 
     // Cast user data to DwarfUnit
-    DWARFCompileUnit* dwarf_cu =
-        static_cast<DWARFCompileUnit*>(sc.comp_unit->GetUserData());
+    lldb_private::plugin::dwarf::DWARFCompileUnit* dwarf_cu =
+        static_cast<lldb_private::plugin::dwarf::DWARFCompileUnit*>(sc.comp_unit->GetUserData());
     if (dwarf_cu && dwarf_cu == &dwarf_cu->GetNonSkeletonUnit()) {
       // The skeleton unit is the only unit, but is there supposed to be a .dwo?
       llvm::SmallVector<std::string, 2> missing_symbols;

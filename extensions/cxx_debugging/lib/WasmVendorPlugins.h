@@ -7,19 +7,26 @@
 #include "ApiContext.h"
 #include "Plugins/SymbolFile/DWARF/DWARFDeclContext.h"
 #include "Plugins/SymbolFile/DWARF/SymbolFileDWARF.h"
+#include "Plugins/SymbolFile/DWARF/DWARFDIE.h"
+#include "Plugins/SymbolFile/DWARF/DWARFUnit.h"
 #include "Plugins/TypeSystem/Clang/TypeSystemClang.h"
 #include "lldb/Core/Debugger.h"
 #include "lldb/Target/RegisterContext.h"
 #include "lldb/Target/Unwind.h"
+#include "lldb/Symbol/Type.h"
 #include "llvm/BinaryFormat/Dwarf.h"
-
-class SymbolVendorWASM;
-class SymbolFileDWARF;
+#include <optional>
 
 namespace lldb_private {
 class FileSystem;
 class CPlusPlusLanguage;
 class ClangASTContext;
+namespace plugin {
+namespace dwarf {
+class SymbolFileDWARF;
+class DWARFDeclContext;
+}  // namespace dwarf
+}  // namespace plugin
 namespace wasm {
 class ObjectFileWasm;
 class SymbolVendorWasm;
@@ -62,8 +69,8 @@ class WasmPlatform : public lldb_private::Platform {
   static void Terminate();
 
   class Resolver : public lldb_private::UserIDResolver {
-    llvm::Optional<std::string> DoGetUserName(id_t uid) final { return {}; }
-    llvm::Optional<std::string> DoGetGroupName(id_t gid) final { return {}; }
+    std::optional<std::string> DoGetUserName(id_t uid) final { return {}; }
+    std::optional<std::string> DoGetGroupName(id_t gid) final { return {}; }
   };
   Resolver resolver_;
 
@@ -84,7 +91,7 @@ class WasmPlatform : public lldb_private::Platform {
                          lldb_private::Debugger& debugger,
                          lldb_private::Target* target,
                          lldb_private::Status& error) final {
-    error.SetErrorString("Cannot attach to processes");
+    error = lldb_private::Status::FromErrorString("Cannot attach to processes");
     return {};
   }
 };
@@ -214,28 +221,28 @@ class WasmProcess : public lldb_private::Process {
   llvm::StringRef GetPluginName() override { return GetPluginNameStatic(); }
 };
 
-class SymbolFileWasmDWARF : public ::SymbolFileDWARF {
+using lldb_private::plugin::dwarf::DWARFDIE;
+class SymbolFileWasmDWARF : public lldb_private::plugin::dwarf::SymbolFileDWARF {
   static char ID;
 
  public:
-  using SymbolFileDWARF::SymbolFileDWARF;
+  using lldb_private::plugin::dwarf::SymbolFileDWARF::SymbolFileDWARF;
 
   bool isA(const void* ClassID) const override {
-    return ClassID == &ID || SymbolFileDWARF::isA(ClassID);
+    return ClassID == &ID || lldb_private::plugin::dwarf::SymbolFileDWARF::isA(ClassID);
   }
-  static bool classof(const SymbolFile* obj) { return obj->isA(&ID); }
+  static bool classof(const lldb_private::SymbolFile* obj) { return obj->isA(&ID); }
 
   static void Initialize();
 
   static void Terminate();
 
   static llvm::StringRef GetPluginNameStatic() { return "wasm_dwarf"; }
-  llvm::StringRef GetPluginName() final { return GetPluginNameStatic(); }
+  llvm::StringRef GetPluginName() override { return GetPluginNameStatic(); }
 
   static llvm::StringRef GetPluginDescriptionStatic();
 
-  static lldb_private::SymbolFile* CreateInstance(
-      lldb::ObjectFileSP objfile_sp);
+  static lldb_private::SymbolFile* CreateInstance(lldb::ObjectFileSP objfile_sp);
 
   struct WasmValueLoader {
     SymbolFileWasmDWARF& symbol_file;
@@ -256,7 +263,7 @@ class SymbolFileWasmDWARF : public ::SymbolFileDWARF {
   lldb::offset_t GetVendorDWARFOpcodeSize(
       const lldb_private::DataExtractor& data,
       const lldb::offset_t data_offset,
-      const uint8_t op) const final {
+      const uint8_t op) const override {
     return LLDB_INVALID_OFFSET;
   }
 
@@ -264,7 +271,7 @@ class SymbolFileWasmDWARF : public ::SymbolFileDWARF {
       uint8_t op,
       const lldb_private::DataExtractor& opcodes,
       lldb::offset_t& offset,
-      std::vector<lldb_private::Value>& stack) const final {
+      std::vector<lldb_private::Value>& stack) const override {
     if (!current_value_loader_) {
       return false;
     }
@@ -289,35 +296,46 @@ class SymbolFileWasmDWARF : public ::SymbolFileDWARF {
     return false;
   }
 
-  std::shared_ptr<lldb_private::Type> externref_type_sp;
+  lldb::TypeSP externref_type_sp;
 
-  lldb::TypeSP FindDefinitionTypeForDWARFDeclContext(
-      const DWARFDeclContext& dwarf_decl_ctx) override {
-    // We define type externref_t as a 32-bit integer, so as to be
-    // able to transfer some information through the interpreter
-    const uint32_t dwarf_decl_ctx_count = dwarf_decl_ctx.GetSize();
-    if (dwarf_decl_ctx_count > 0) {
-      const lldb_private::ConstString type_name(dwarf_decl_ctx[0].name);
-      if (type_name == "externref_t") {
-        if (!externref_type_sp) {
-          const lldb::LanguageType language = dwarf_decl_ctx.GetLanguage();
-          auto type_system = GetTypeSystemForLanguage(language);
+  DWARFDIE FindDefinitionDIE(const DWARFDIE &die) override {
+    // For externref_t, we don't need to find a definition DIE since we create the type ourselves
+    if (llvm::StringRef(die.GetName()) == "externref_t") {
+      return die;
+    }
+    return SymbolFileDWARF::FindDefinitionDIE(die);
+  }
+
+  lldb::TypeSP ParseType(const lldb_private::SymbolContext &sc, const DWARFDIE &die,
+                        bool *type_is_new_ptr) {
+    if (llvm::StringRef(die.GetName()) == "externref_t") {
+      if (!externref_type_sp) {
+          auto type_system = GetTypeSystemForLanguage(lldb::eLanguageTypeC_plus_plus);
           bool ok = !type_system.takeError();
           assert(ok);
           auto ast = clang::dyn_cast<lldb_private::TypeSystemClang>(
               type_system->get());
           lldb_private::CompilerType clang_type =
               ast->GetBasicType(lldb::eBasicTypeUnsignedLongLong);
-          externref_type_sp = std::make_shared<lldb_private::Type>(
-              lldb::user_id_t(0), this, type_name, 4, nullptr, LLDB_INVALID_UID,
-              lldb_private::Type::eEncodingIsUID, lldb_private::Declaration(),
-              clang_type, lldb_private::Type::ResolveState::Forward);
-        }
-        return externref_type_sp;
-      }
+        
+        externref_type_sp = MakeType(
+              lldb::user_id_t(0), // Special ID for our synthetic type
+              lldb_private::ConstString("externref_t"),
+              4, // byte size
+              nullptr, // No CompilerType-to-clang-type mapping needed
+              LLDB_INVALID_UID, // No clang type needed since we provide compiler_type
+              lldb_private::Type::eEncodingIsUID,
+              lldb_private::Declaration(),
+              clang_type,
+              lldb_private::Type::ResolveState::Forward);
+        if (type_is_new_ptr)
+          *type_is_new_ptr = true;
+      } else if (type_is_new_ptr) {
+        *type_is_new_ptr = false;
+      } 
+      return externref_type_sp;
     }
-    return SymbolFileDWARF::FindDefinitionTypeForDWARFDeclContext(
-        dwarf_decl_ctx);
+    return SymbolFileDWARF::ParseType(sc, die, type_is_new_ptr);
   }
 
  private:

@@ -10,6 +10,7 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <optional>
 #include <variant>
 
 namespace symbols_backend {
@@ -35,7 +36,7 @@ struct ExpressionResult {
                void*,
                std::nullptr_t>
       value;
-  llvm::Optional<size_t> address;
+  std::optional<size_t> address;
 };
 
 llvm::Expected<ExpressionResult> InterpretExpression(

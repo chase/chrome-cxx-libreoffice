@@ -1,0 +1,126 @@
+diff --git a/lldb-eval/context.cc b/lldb-eval/context.cc
+index 3ff1ccc..d3d8ca9 100644
+--- a/lldb-eval/context.cc
++++ b/lldb-eval/context.cc
+@@ -149,7 +149,7 @@ TypeSP Context::ResolveTypeByName(const std::string& name) const {
+   llvm::StringRef name_ref(name);
+   bool global_scope = false;
+ 
+-  if (name_ref.startswith("::")) {
++  if (name_ref.starts_with("::")) {
+     name_ref = name_ref.drop_front(2);
+     global_scope = true;
+   }
+@@ -169,7 +169,7 @@ TypeSP Context::ResolveTypeByName(const std::string& name) const {
+ 
+     if (type_name == name_ref) {
+       full_match = type;
+-    } else if (type_name.endswith(name_ref)) {
++    } else if (type_name.ends_with(name_ref)) {
+       partial_matches.push_back(type);
+     }
+   }
+@@ -215,9 +215,9 @@ static lldb::SBValue LookupStaticIdentifier(lldb::SBTarget target,
+ 
+     if (val_name == name_ref ||
+         val_name == llvm::formatv("::{0}", name_ref).str() ||
+-        val_name.endswith(llvm::formatv(" {0}", name_ref).str()) ||
+-        val_name.endswith(llvm::formatv("*{0}", name_ref).str()) ||
+-        val_name.endswith(llvm::formatv("&{0}", name_ref).str())) {
++        val_name.ends_with(llvm::formatv(" {0}", name_ref).str()) ||
++        val_name.ends_with(llvm::formatv("*{0}", name_ref).str()) ||
++        val_name.ends_with(llvm::formatv("&{0}", name_ref).str())) {
+       return val;
+     }
+   }
+@@ -237,7 +237,7 @@ std::unique_ptr<ParserContext::IdentifierInfo> Context::LookupIdentifier(
+ 
+   // Support $rax as a special syntax for accessing registers.
+   // Will return an invalid value in case the requested register doesn't exist.
+-  if (name_ref.startswith("$")) {
++  if (name_ref.starts_with("$")) {
+     const char* reg_name = name_ref.drop_front(1).data();
+     return IdentifierInfo::FromValue(ctx_.GetFrame().FindRegister(reg_name));
+   }
+@@ -245,7 +245,7 @@ std::unique_ptr<ParserContext::IdentifierInfo> Context::LookupIdentifier(
+   // Internally values don't have global scope qualifier in their names and
+   // LLDB doesn't support queries with it too.
+   bool global_scope = false;
+-  if (name_ref.startswith("::")) {
++  if (name_ref.starts_with("::")) {
+     name_ref = name_ref.drop_front(2);
+     global_scope = true;
+   }
+diff --git a/lldb-eval/parser.cc b/lldb-eval/parser.cc
+index a3b240f..a7e748a 100644
+--- a/lldb-eval/parser.cc
++++ b/lldb-eval/parser.cc
+@@ -45,7 +45,7 @@
+ #include "llvm/ADT/iterator_range.h"
+ #include "llvm/Support/FormatAdapters.h"
+ #include "llvm/Support/FormatVariadic.h"
+-#include "llvm/Support/Host.h"
++#include "llvm/TargetParser/Host.h"
+ 
+ namespace {
+ 
+@@ -2322,7 +2322,7 @@ ExprResult Parser::ParseFloatingLiteral(clang::NumericLiteralParser& literal,
+                                          ? llvm::APFloat::IEEEsingle()
+                                          : llvm::APFloat::IEEEdouble();
+   llvm::APFloat raw_value(format);
+-  llvm::APFloat::opStatus result = literal.GetFloatValue(raw_value);
++  llvm::APFloat::opStatus result = literal.GetFloatValue(raw_value, llvm::RoundingMode::NearestTiesToEven);
+ 
+   // Overflow is always an error, but underflow is only an error if we
+   // underflowed to zero (APFloat reports denormals as underflow).
+diff --git a/lldb-eval/type.h b/lldb-eval/type.h
+index 99b2481..3a654d2 100644
+--- a/lldb-eval/type.h
++++ b/lldb-eval/type.h
+@@ -3,10 +3,10 @@
+ 
+ #include <cstdint>
+ #include <memory>
++#include <optional>
+ #include <vector>
+ 
+ #include "lldb/lldb-enumerations.h"
+-#include "llvm/ADT/Optional.h"
+ #include "llvm/ADT/StringRef.h"
+ 
+ namespace lldb_eval {
+@@ -52,7 +52,7 @@ class Type {
+   virtual TypeSP GetVirtualBaseClassAtIndex(uint32_t) = 0;
+ 
+   struct MemberInfo {
+-    llvm::Optional<std::string> name;
++    std::optional<std::string> name;
+     TypeSP type;
+     bool is_bitfield;
+     uint32_t bitfield_size_in_bits;
+diff --git a/lldb-eval/value.h b/lldb-eval/value.h
+index c052b6d..8a6ad9b 100644
+--- a/lldb-eval/value.h
++++ b/lldb-eval/value.h
+@@ -92,7 +92,7 @@ class LLDBType : public Type {
+   MemberInfo GetFieldAtIndex(uint32_t idx) override {
+     auto member = type_.GetFieldAtIndex(idx);
+     auto name = member.GetName() ? std::string(member.GetName())
+-                                 : llvm::Optional<std::string>();
++                                : std::optional<std::string>();
+     return {name, LLDBType::CreateSP(member.GetType()), member.IsBitfield(),
+             member.GetBitfieldSizeInBits()};
+   }
+diff --git a/tools/lexer.cc b/tools/lexer.cc
+index d2620f9..6efd0b7 100644
+--- a/tools/lexer.cc
++++ b/tools/lexer.cc
+@@ -29,7 +29,7 @@
+ #include "clang/Lex/Preprocessor.h"
+ #include "clang/Lex/PreprocessorOptions.h"
+ #include "clang/Lex/Token.h"
+-#include "llvm/Support/Host.h"
++#include "llvm/TargetParser/Host.h"
+ 
+ int main(int argc, char** argv) {
+   (void)argc;

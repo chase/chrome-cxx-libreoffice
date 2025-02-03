@@ -96,12 +96,12 @@ size_t WasmProcess::DoReadMemory(lldb::addr_t vm_addr,
                                  size_t size,
                                  lldb_private::Status& error) {
   if (!proxy_) {
-    error.SetErrorString("Proxy not initialized");
+    error = lldb_private::Status("Proxy not initialized");
     return 0;
   }
   auto result = proxy_->ReadMemory(vm_addr, buf, size);
   if (!result) {
-    error.SetErrorString(llvm::toString(result.takeError()));
+    error = lldb_private::Status(llvm::toString(result.takeError()));
     return 0;
   }
   return *result;
@@ -156,17 +156,5 @@ namespace lldb_private {
 void HostInfoLinux::ComputeHostArchitectureSupport(ArchSpec& arch_32,
                                                    ArchSpec& arch_64) {
   HostInfoPosix::ComputeHostArchitectureSupport(arch_32, arch_64);
-}
-
-bool HostInfoLinux::ComputeSystemPluginsDirectory(FileSpec& file_spec) {
-  return false;
-}
-
-bool HostInfoLinux::ComputeUserPluginsDirectory(FileSpec& file_spec) {
-  return false;
-}
-
-Environment Host::GetEnvironment() {
-  return {};
 }
 }  // namespace lldb_private
