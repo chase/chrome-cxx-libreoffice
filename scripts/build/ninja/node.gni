@@ -9,7 +9,7 @@ template("node_action") {
          "You must define the 'script' for a Node action")
 
   action(target_name) {
-    script = "//third_party/node/node.py"
+    script = "/emsdk/node/20.18.0_64bit/bin/node"
 
     forward_variables_from(invoker,
                            "*",

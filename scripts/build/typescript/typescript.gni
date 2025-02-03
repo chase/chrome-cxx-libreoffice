@@ -63,8 +63,7 @@ template("ts_library") {
                            ])
 
     inputs += [
-      "//third_party/node/node.py",
-      "//third_party/node/node_modules.py",
+      "/emsdk/node/20.18.0_64bit/bin/node",
       devtools_location_prepend + "scripts/devtools_paths.py",
       devtools_location_prepend + "config/typescript/tsconfig.base.json",
       devtools_location_prepend + "node_modules/typescript/lib/tsc.js",
@@ -74,12 +73,6 @@ template("ts_library") {
       devtools_location_prepend +
           "node_modules/@types/wicg-task-scheduling/index.d.ts",
     ]
-
-    # When use_remoteexec=true, node actions run on remote Linux worker.
-    # So it should include linux node binary in inputs.
-    if (use_remoteexec) {
-      inputs += [ "//third_party/node/linux/node-linux-x64/bin/node" ]
-    }
 
     _typescript_config_name = target_name
 

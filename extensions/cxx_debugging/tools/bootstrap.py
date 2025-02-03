@@ -24,16 +24,6 @@ CMAKE_DEFAULTS = [
 def devtools_dir(source_dir):
     return os.path.dirname(os.path.dirname(source_dir))
 
-
-def node_path(source_dir):
-    return os.path.join(
-        devtools_dir(source_dir), 'third_party', 'node', *{
-            'Darwin': ('mac', 'node-darwin-x64', 'bin'),
-            'Linux': ('linux', 'node-linux-x64', 'bin'),
-            'Windows': ('win', ),
-        }[platform.system()])
-
-
 def is_windows():
     return sys.platform == 'cygwin' or sys.platform.startswith('win')
 
@@ -61,8 +51,9 @@ def stage1(sysroot_dir, source_dir, OPTIONS):
     cmake_settings = {
         'build_shared': 'OFF' if OPTIONS.static else 'ON',
     }
+    cmake = shutil.which('cmake')
     cmake_args = [
-        OPTIONS.cmake,
+        cmake,
         OPTIONS.extension_source,
         *CMAKE_DEFAULTS,
         '-DBUILD_SHARED_LIBS={build_shared}'.format(**cmake_settings),
@@ -79,7 +70,7 @@ def stage1(sysroot_dir, source_dir, OPTIONS):
 
     maybe_cmake(binary_dir, cmake_args, OPTIONS.verbose)
 
-    autoninja = shutil.which('autoninja')
+    autoninja = shutil.which('autoninja', path='/app/depot_tools')
     call([
         autoninja, 'lldb-tblgen', 'clang-tblgen', 'llvm-tblgen', 'llvm-dwp',
         'llvm-mc'
@@ -93,11 +84,7 @@ def stage2(source_dir, stage1_dir, OPTIONS):
     sys.stdout.write('Building Stage 2.\n')
     llvm_tools_dir = os.path.abspath(
         os.path.join(stage1_dir, 'third_party', 'llvm', 'src', 'llvm', 'bin'))
-    emcc = os.path.join(devtools_dir(source_dir), 'third_party',
-                        'emscripten-releases', 'install', 'emscripten', 'emcc')
-    wasm_ld_dir = os.path.join(devtools_dir(source_dir), 'third_party',
-                               'emscripten-releases', 'install', 'bin')
-
+    wasm_ld_dir = '/emsdk/upstream/bin'
 
     binary_dir = os.path.abspath(
         os.path.join(OPTIONS.build_dir, 'DevTools_CXX_Debugging.stage2'))
@@ -105,9 +92,7 @@ def stage2(source_dir, stage1_dir, OPTIONS):
         os.makedirs(binary_dir)
 
     cmake_settings = {
-        'toolchain_file':
-        os.path.join(os.path.dirname(emcc), 'cmake', 'Modules', 'Platform',
-                     'Emscripten.cmake'),
+        'toolchain_file': '/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake',
         'wasm_ld':
         os.path.join(wasm_ld_dir, 'wasm-ld' + exec_extension()),
         'llvm_dwp':
@@ -121,8 +106,11 @@ def stage2(source_dir, stage1_dir, OPTIONS):
         'build_type':
         _build_type(OPTIONS),
     }
+    emcmake = '/emsdk/upstream/emscripten/emcmake'
+    cmake = shutil.which('cmake')
     cmake_args = [
-        OPTIONS.cmake, OPTIONS.extension_source, *CMAKE_DEFAULTS,
+        emcmake,
+        cmake, OPTIONS.extension_source, *CMAKE_DEFAULTS,
         '-DCMAKE_CXX_FLAGS_RELWITHDEBINFO=-O1 -g -DNDEBUG',
         '-DCMAKE_C_FLAGS_RELWITHDEBINFO=-O1 -g -DNDEBUG',
         '-DCMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO=-O1 -g -DNDEBUG -gseparate-dwarf',
@@ -131,7 +119,6 @@ def stage2(source_dir, stage1_dir, OPTIONS):
         '-DHAVE_POSIX_REGEX=0', '-Derrc_exit_code=0',
         '-Derrc_exit_code__TRYRUN_OUTPUT=0',
         '-DCMAKE_BUILD_TYPE={build_type}'.format(**cmake_settings),
-        '-DCMAKE_TOOLCHAIN_FILE={toolchain_file}'.format(**cmake_settings),
         '-DLLVM_DWP={llvm_dwp}'.format(**cmake_settings),
         '-DLLVM_TABLEGEN={llvm_tblgen}'.format(**cmake_settings),
         '-DCLANG_TABLEGEN={clang_tblgen}'.format(**cmake_settings),
@@ -141,7 +128,7 @@ def stage2(source_dir, stage1_dir, OPTIONS):
     if is_windows():
         cmake_args.append('-DLLVM_HOST_TRIPLE=x86_64')
 
-    if OPTIONS.split_dwarf:
+    if OPTIONS.splitdwarf:
         cmake_args.extend([
             '-DCXX_DEBUGGING_USE_SPLIT_DWARF=ON',
             '-DLLVM_USE_SPLIT_DWARF=ON',
@@ -152,7 +139,7 @@ def stage2(source_dir, stage1_dir, OPTIONS):
             '-DLLVM_USE_SPLIT_DWARF=OFF',
         ])
 
-    if OPTIONS.gdwarf_5:
+    if OPTIONS.gdwarf5:
         cmake_args.extend(['-DCXX_DEBUGGING_ENABLE_DWARF5=ON'])
     else:
         cmake_args.extend(['-DCXX_DEBUGGING_ENABLE_DWARF5=OFF'])
@@ -232,8 +219,6 @@ def script_main(args):
     source_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     repo_dir = os.path.dirname(os.path.dirname(source_dir))
     third_party = os.path.join(repo_dir, 'third_party')
-    clang_dir = os.path.join(third_party, 'emscripten-releases', 'install',
-                             'bin')
     cmake_dir = os.path.join(third_party, 'cmake', 'bin')
     sysroot_dir = find_sysroot(repo_dir)
 
@@ -243,10 +228,10 @@ def script_main(args):
                         default=shutil.which('cmake', path=cmake_dir),
                         help='Path to the cmake configure tool.')
     parser.add_argument('-cc',
-                        default=shutil.which('clang', path=clang_dir),
+                        default=shutil.which('clang-15'),
                         help='The C compiler.')
     parser.add_argument('-cxx',
-                        default=shutil.which('clang++', path=clang_dir),
+                        default=shutil.which('clang++-15'),
                         help='The C++ compiler.')
     parser.add_argument('-extension-source',
                         default=source_dir,
@@ -290,13 +275,13 @@ def script_main(args):
         default=0,
         help='Provide a version patch level for building a release,'
         'instead of building a debug version. (deprecates -release)')
-    parser.add_argument('-split-dwarf',
+    parser.add_argument('-splitdwarf',
                         action='store_true',
                         help='Build with split-dwarf support.')
     parser.add_argument('-pubnames',
                         action='store_true',
                         help='Build with split-dwarf support.')
-    parser.add_argument('-gdwarf-5',
+    parser.add_argument('-gdwarf5',
                         action='store_true',
                         help='Build with DWARF5 debug info.')
     parser.add_argument(
@@ -331,7 +316,7 @@ def find_sysroot(repo_dir):
     sysroots = [
         os.path.join(build_linux, f) for f in os.listdir(build_linux)
         if os.path.isdir(os.path.join(build_linux, f))
-        and re.match('debian_.*_amd64-sysroot', f)
+        and re.match('debian_.*_*-sysroot', f)
     ]
     assert len(sysroots) >= 1, 'No sysroot found!'
     assert len(sysroots) <= 1, 'Too many sysroots found!'

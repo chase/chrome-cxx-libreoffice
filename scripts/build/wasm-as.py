@@ -68,7 +68,7 @@ def script_main(args):
         leb_len += 1
     offset = int(offset) + 1 + leb_len
 
-    node = path.realpath(path.join(REPO_DIR, 'third_party', 'node', 'node.py'))
+    node = '/emsdk/node/20.18.0_64bit/bin/node'
     sourcemap2json = path.realpath(
         path.join(REPO_DIR, 'scripts', 'build', 'wasm_sourcemap.mjs'))
     sourcemap_contents = subprocess.check_output([

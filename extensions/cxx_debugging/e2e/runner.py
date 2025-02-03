@@ -107,7 +107,7 @@ def list_tests(path):
                     if f.endswith('.yaml'))
 
 
-NODE = repo_path('//third_party/node/node.py')
+NODE = 'extensions/cxx_debugging/e2e/runner.py'
 
 
 class Test(object):

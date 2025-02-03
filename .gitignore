@@ -48,7 +48,14 @@ test/perf/.generated
 /.vscode/settings.json
 /.vscode/tasks.json
 /.vscode/launch.json
+/.cache
+/.config
+/depot_tools
 
 # Linters caches
 .eslintcache
 .stylelintcache
+.gcs_entries
+.gclient_previous_custom_vars
+.gclient_entries
+.cipd

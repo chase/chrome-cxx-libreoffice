@@ -15,6 +15,7 @@ import sys
 import tarfile
 import urllib.request
 import zipfile
+import subprocess
 
 BS = 8192
 STAMP_FILE = 'build-revision'
@@ -33,12 +34,43 @@ def write_stamp_file(options, url):
     with open(os.path.join(options.dest, STAMP_FILE), 'w') as f:
         return f.write(url)
 
+# http://stackoverflow.com/questions/600268/mkdir-p-functionality-in-python
+def mkdir_p(path):
+  try:
+    os.makedirs(path)
+  except OSError:
+    if not os.path.isdir(path):
+      raise
+
+def is_nonempty_directory(path):
+  if not os.path.isdir(path):
+    return False
+  return len(os.listdir(path)) != 0
+
+def run(cmd, cwd=None, quiet=False):
+  process = subprocess.Popen(cmd, cwd=cwd, env=os.environ.copy())
+  process.communicate()
+  if process.returncode != 0 and not quiet:
+    raise Exception(str(cmd) + ' failed with error code ' + str(process.returncode) + '!')
+  return process.returncode
+
+
+# http://pythonicprose.blogspot.fi/2009/10/python-extract-targz-archive.html
+def untar(source_filename, dest_dir):
+  print("Unpacking '" + source_filename + "' to '" + dest_dir + "'")
+  mkdir_p(dest_dir)
+  returncode = run(['tar', '-xf', source_filename, '--strip', '1'], cwd=dest_dir)
+  # tfile = tarfile.open(source_filename, 'r:gz')
+  # tfile.extractall(dest_dir)
+  return returncode == 0
 
 def unzip(os_name, file, dest):
     is_zip = os_name == 'win'
-    z = zipfile.ZipFile(file) if is_zip else tarfile.open(file, 'r:bz2')
-    z.extractall(path=dest)
-
+    if is_zip:
+        z = zipfile.ZipFile(file)
+        z.extractall(path=dest)
+    else:
+        untar(file, dest)
 
 def script_main(args):
     parser = argparse.ArgumentParser(description='Download Emscripten')
@@ -60,7 +92,7 @@ def script_main(args):
     if host_arch == 'arm64' or host_arch.startswith('aarch64'):
         arch_suffix = '-arm64'
 
-    file_extension = 'zip' if os_name == 'win' else 'tbz2'
+    file_extension = 'zip' if os_name == 'win' else 'tar.xz'
 
     url = DOWNLOAD_URL % (os_name, options.tag, arch_suffix, file_extension)
 

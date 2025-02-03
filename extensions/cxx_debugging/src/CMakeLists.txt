@@ -47,11 +47,9 @@ add_custom_command(
     ${CMAKE_COMMAND}
   ARGS
     -E env NODE_PATH=${PROJECT_SOURCE_DIR}/node_modules:${DEVTOOLS_SOURCE_DIR}/node_modules
-    python3
-    ${DEVTOOLS_SOURCE_DIR}/third_party/node/node.py
-    --output
+    /emsdk/node/20.18.0_64bit/bin/node
     ${DEVTOOLS_SOURCE_DIR}/node_modules/.bin/rollup
-    -c --failAfterWarnings
+    -c --failAfterWarnings --bundleConfigAsCjs
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   MAIN_DEPENDENCY ${CMAKE_CURRENT_BINARY_DIR}/rollup.config.js
   DEPENDS ${TS_COMPILER_OUTPUTS}
@@ -67,7 +65,7 @@ target_link_libraries(SymbolsBackend PRIVATE -sMAXIMUM_MEMORY=4GB)
 target_link_libraries(SymbolsBackend PRIVATE -sALLOW_MEMORY_GROWTH=1)
 target_link_libraries(SymbolsBackend PRIVATE -sMODULARIZE=1)
 target_link_libraries(SymbolsBackend PRIVATE -s'EXPORT_NAME=createSymbolsBackend')
-target_link_libraries(SymbolsBackend PRIVATE -s'EXTRA_EXPORTED_RUNTIME_METHODS=[\"FS\"]')
+target_link_libraries(SymbolsBackend PRIVATE -s'EXPORTED_RUNTIME_METHODS=[\"FS\"]')
 target_link_libraries(SymbolsBackend PRIVATE -sERROR_ON_UNDEFINED_SYMBOLS=0)
 target_link_libraries(SymbolsBackend PRIVATE --bind)
 target_link_libraries(SymbolsBackend PRIVATE --no-heap-copy)

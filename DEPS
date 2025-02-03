@@ -29,12 +29,8 @@ vars = {
   'clang_format_url': 'https://chromium.googlesource.com/external/github.com/llvm/llvm-project/clang/tools/clang-format.git',
   'clang_format_revision': '37f6e68a107df43b7d7e044fd36a13cbae3413f2',
 
-  'emscripten_tag': 'ade9d780ff17c88d81aa13860361743e3c1e1396',
-
   # GN CIPD package version.
   'gn_version': 'git_revision:ed1abc107815210dc66ec439542bee2f6cbabc00',
-
-  'cmake_version': 'version:2@3.21.3',
 
   'llvm_url': 'https://chromium.googlesource.com/external/github.com/llvm/llvm-project/',
   'llvm_revision': '3c51ea3619e488db19cd26840ed46d58cfc7062f',
@@ -73,15 +69,6 @@ deps = {
   'third_party/clang-format/script': {
     'url': Var('clang_format_url') + '@' + Var('clang_format_revision'),
     'condition': 'build_with_chromium == False',
-  },
-  'third_party/cmake': {
-    'packages': [{
-      'package': 'infra/3pp/tools/cmake/${{platform}}',
-      'version': Var('cmake_version')
-    }],
-    'dep_type':
-      'cipd',
-    'condition': 'checkout_cxx_debugging_extension_deps == True',
   },
   'extensions/cxx_debugging/third_party/llvm/src': {
     'url': Var('llvm_url') + '@' + Var('llvm_revision'),
@@ -159,63 +146,6 @@ deps = {
     ],
     'dep_type': 'cipd',
     'condition': 'build_with_chromium == False',
-  },
-  # Pull down Node binaries for WebUI toolchain.
-  'third_party/node/linux': {
-    'dep_type': 'gcs',
-    'condition': 'host_os == "linux" and build_with_chromium == False and non_git_source',
-    'bucket': 'chromium-nodejs',
-    'objects': [
-        {
-            'object_name': 'fa98c6432de572206bc5519f85e9c96bd518b039',
-            'sha256sum': 'fb563633b5bfe2d4307075c54c6bb54664a3b5ec6bc811f5b15742720549007a',
-            'size_bytes': 50288755,
-            'generation': 1730835522207929,
-            'output_file': 'node-linux-x64.tar.gz',
-        },
-    ],
-  },
-  'third_party/node/mac': {
-      'dep_type': 'gcs',
-      'condition': 'host_os == "mac" and build_with_chromium == False and host_cpu != "arm64" and non_git_source',
-      'bucket': 'chromium-nodejs',
-      'objects': [
-          {
-              'object_name': '4c8952a65a1ce7a2e4cff6db68f9b7454c46349f',
-              'sha256sum': 'fadb4530fbe6e35ed298848c66102a0aa7d92974789e6222c4eadee26a381e7e',
-              'size_bytes': 45672893,
-              'generation': 1730835514382259,
-              'output_file': 'node-darwin-x64.tar.gz',
-          },
-      ],
-  },
-  'third_party/node/mac_arm64': {
-      'dep_type': 'gcs',
-      'condition': 'host_os == "mac" and build_with_chromium == False and host_cpu == "arm64" and non_git_source',
-      'bucket': 'chromium-nodejs',
-      'objects': [
-          {
-              'object_name': '0886aa6a146cb5c213cb09b59ed1075982e4cb57',
-              'sha256sum': 'd39e2d44d58bb89740b9aca1073959fc92edbdbbe810a5e48448e331cf72c196',
-              'size_bytes': 44929037,
-              'generation': 1730835518292126,
-              'output_file': 'node-darwin-arm64.tar.gz',
-          },
-      ],
-  },
-  'third_party/node/win': {
-      'dep_type': 'gcs',
-      'condition': 'host_os == "win" and build_with_chromium == False and non_git_source',
-      'bucket': 'chromium-nodejs',
-      'objects': [
-          {
-              'object_name': '907d7e104e7389dc74cec7d32527c1db704b7f96',
-              'sha256sum': '7447c4ece014aa41fb2ff866c993c708e5a8213a00913cc2ac5049ea3ffc230d',
-              'size_bytes': 80511640,
-              'generation': 1730835526374028,
-              'output_file': 'node.exe',
-          },
-      ],
   },
 }
 
@@ -300,19 +230,17 @@ hooks = [
                '-o', 'build/util/LASTCHANGE'],
   },
   {
-    'name': 'emscripten',
+    'name': 'Patch LLDB to work with emscripten',
+    'condition': 'checkout_cxx_debugging_extension_deps == True',
     'pattern': '.',
-    'condition': 'build_with_chromium == False',
-    'action': ['vpython3', 'scripts/deps/download_emscripten.py', Var('emscripten_tag'), 'third_party/emscripten-releases'],
+    'action': ['git', 'apply', '--directory=extensions/cxx_debugging/third_party/llvm/src', 'extensions/cxx_debugging/llvm-lldb-SBFile-emscripten.patch'],
   },
   {
     'name': 'VS Code settings',
     'pattern': '.',
     'condition': 'build_with_chromium == False',
     'action': [
-      'vpython3',
-      'third_party/node/node.py',
-      '--output',
+      'node',
       # Silence the "Importing JSON modules" warning
       '--no-warnings=ExperimentalWarning',
       'scripts/deps/sync-vscode-settings.mjs'

@@ -5,8 +5,7 @@
 
 add_custom_target(check-extension
   COMMAND
-    ${DEVTOOLS_SOURCE_DIR}/third_party/node/node.py
-    --output
+    /emsdk/node/20.18.0_64bit/bin/node
     ${DEVTOOLS_SOURCE_DIR}/node_modules/karma/bin/karma start
     ${CMAKE_CURRENT_BINARY_DIR}/karma.conf.js
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
@@ -48,7 +47,7 @@ target_link_libraries(SymbolsBackendTests PRIVATE
   -sEXPORT_NAME=createModule
   -sEXIT_RUNTIME=1
   -sEXPORT_ES6=1
-  -s'EXTRA_EXPORTED_RUNTIME_METHODS=[\"FS\"]'
+  -s'EXPORTED_RUNTIME_METHODS=[\"FS\"]'
   -s'DEFAULT_LIBRARY_FUNCS_TO_INCLUDE=[\"$$Browser\"]'
   -sWASM_BIGINT
   -sERROR_ON_UNDEFINED_SYMBOLS=0

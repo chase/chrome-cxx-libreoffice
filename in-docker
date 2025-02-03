@@ -1,0 +1,14 @@
+#!/bin/sh
+docker build -t chrome-cxx-libreoffice:0.0.1 .
+exec docker run \
+  --rm \
+  -it \
+  -v $(pwd):/app:rw \
+  -v $(pwd)/.cache:/.cache:rw \
+  -v $(pwd)/.npm:/.npm:rw \
+  -v $(pwd)/.config:/.config:rw \
+  -v $(pwd)/.gsutil:/.gsutil:rw \
+  -u $(id -u):$(id -g) \
+  -w /app \
+  chrome-cxx-libreoffice:0.0.1 \
+  bash

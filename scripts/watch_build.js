@@ -29,7 +29,7 @@ const currentTimeString = () => {
       .toLocaleTimeString('en-US', {hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'});
 };
 
-const NODE_PATH = path.join('third_party', 'node', 'node.py');
+const NODE_PATH = '/emsdk/node/20.18.0_64bit/bin/node';
 const ESBUILD_PATH = path.join('third_party', 'esbuild', 'esbuild');
 const GENERATE_CSS_JS_FILES_PATH = path.join('scripts', 'build', 'generate_css_js_files.js');
 

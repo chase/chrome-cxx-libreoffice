@@ -185,7 +185,7 @@ export class WasmMemoryView {
       if (data.byteOffset !== 0 || data.byteLength !== data.buffer.byteLength) {
         throw new Error('Did not expect a partial memory view');
       }
-      slice = this.pages.addSlice(data.buffer, page);
+      slice = this.pages.addSlice(data.buffer as ArrayBuffer, page);
     }
     return slice.view(page, size);
   }
