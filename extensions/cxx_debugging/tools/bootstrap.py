@@ -41,7 +41,7 @@ def call(cmd, verbose=False, **kwargs):
     subprocess.check_call(cmd, **kwargs)
 
 
-def stage1(sysroot_dir, source_dir, OPTIONS):
+def stage1(source_dir, OPTIONS):
     sys.stdout.write('Building Stage 1.\n')
     binary_dir = os.path.abspath(
         os.path.join(OPTIONS.build_dir, 'DevTools_CXX_Debugging.stage1'))
@@ -59,9 +59,6 @@ def stage1(sysroot_dir, source_dir, OPTIONS):
         '-DBUILD_SHARED_LIBS={build_shared}'.format(**cmake_settings),
         '-DCMAKE_BUILD_TYPE=Release',
     ]
-    if not OPTIONS.no_sysroot:
-        cmake_args.extend(('-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY',
-                           '-DCMAKE_SYSROOT={}'.format(sysroot_dir)))
 
     if OPTIONS.cc:
         cmake_args.append('-DCMAKE_C_COMPILER={}'.format(OPTIONS.cc))
@@ -220,7 +217,6 @@ def script_main(args):
     repo_dir = os.path.dirname(os.path.dirname(source_dir))
     third_party = os.path.join(repo_dir, 'third_party')
     cmake_dir = os.path.join(third_party, 'cmake', 'bin')
-    sysroot_dir = find_sysroot(repo_dir)
 
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -247,9 +243,6 @@ def script_main(args):
                         default=True,
                         dest='static',
                         help='Link the first stage dynamically.')
-    parser.add_argument('-no-sysroot',
-                        action='store_true',
-                        help='Disable sysroot.')
     parser.add_argument('-no-check',
                         action='store_true',
                         help='Skip running tests.')
@@ -300,28 +293,12 @@ def script_main(args):
         if OPTIONS.no_check:
             sys.stderr.write('-infra overrides -no-check')
         OPTIONS.no_check = False
-        if OPTIONS.no_sysroot:
-            sys.stderr.write('-infra overrides -no-sysroot')
-        OPTIONS.no_sysroot = False
 
     if OPTIONS.stage1:
         stage1_dir = OPTIONS.stage1
     else:
-        stage1_dir = stage1(sysroot_dir, source_dir, OPTIONS)
+        stage1_dir = stage1(source_dir, OPTIONS)
     stage2(source_dir, stage1_dir, OPTIONS)
-
-
-def find_sysroot(repo_dir):
-    build_linux = os.path.join(repo_dir, 'build', 'linux')
-    sysroots = [
-        os.path.join(build_linux, f) for f in os.listdir(build_linux)
-        if os.path.isdir(os.path.join(build_linux, f))
-        and re.match('debian_.*_*-sysroot', f)
-    ]
-    assert len(sysroots) >= 1, 'No sysroot found!'
-    assert len(sysroots) <= 1, 'Too many sysroots found!'
-    return sysroots[0]
-
 
 if __name__ == '__main__':
     script_main(sys.argv[1:])

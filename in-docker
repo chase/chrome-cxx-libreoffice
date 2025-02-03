@@ -1,5 +1,13 @@
 #!/bin/sh
-docker build -t chrome-cxx-libreoffice:0.0.1 .
+arch=$(uname -m)
+
+# Set build argument if ARM
+if [[ "$arch" == "arm64" || "$arch" == "aarch64" ]]; then
+  docker build -t chrome-cxx-libreoffice:0.0.1 --build-arg ARCH=-arm64 .
+else
+  docker build -t chrome-cxx-libreoffice:0.0.1 .
+fi
+mkdir -p .cache .npm .config .gsutil
 exec docker run \
   --rm \
   -it \

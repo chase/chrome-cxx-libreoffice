@@ -1,8 +1,7 @@
-FROM emscripten/emsdk:3.1.73-arm64
+ARG ARCH=
+FROM docker.io/emscripten/emsdk:3.1.73${ARCH}
 
-RUN apt update && apt install -y git python3 curl xz-utils build-essential cmake
-
-RUN apt install -y clang-15
+RUN apt update && apt install -y git python3 curl xz-utils build-essential cmake clang-15
 WORKDIR /app
 
 # Stupid fix for missing ptrace.h in muslc includes

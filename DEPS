@@ -66,10 +66,6 @@ allowed_hosts = [
 ]
 
 deps = {
-  'third_party/clang-format/script': {
-    'url': Var('clang_format_url') + '@' + Var('clang_format_revision'),
-    'condition': 'build_with_chromium == False',
-  },
   'extensions/cxx_debugging/third_party/llvm/src': {
     'url': Var('llvm_url') + '@' + Var('llvm_revision'),
     'condition': 'checkout_cxx_debugging_extension_deps == True',
@@ -163,64 +159,6 @@ hooks = [
     ],
   },
 
-  # Pull Chrome binaries from CfT buckets.
-  {
-    'name': 'download_chrome_win',
-    'pattern': '.',
-    'condition': 'host_os == "win" and build_with_chromium == False',
-    'action': [ 'vpython3',
-                'scripts/deps/download_chrome.py',
-                '--url=https://storage.googleapis.com/chrome-for-testing-public/' + Var('chrome') + '/win64/chrome-win64.zip',
-                '--target=third_party/chrome',
-                '--rename_from=chrome-win64',
-                '--rename_to=chrome-win',
-                '--path_to_binary=chrome-win/chrome.exe',
-                '--version_number=' + Var('chrome'),
-    ],
-  },
-  {
-    'name': 'download_chrome_mac',
-    'pattern': '.',
-    'condition': 'host_os == "mac" and build_with_chromium == False and host_cpu != "arm64"',
-    'action': [ 'vpython3',
-                'scripts/deps/download_chrome.py',
-                '--url=https://storage.googleapis.com/chrome-for-testing-public/' + Var('chrome') + '/mac-x64/chrome-mac-x64.zip',
-                '--target=third_party/chrome',
-                '--rename_from=chrome-mac-x64',
-                '--rename_to=chrome-mac',
-                '--path_to_binary=chrome-mac/Google Chrome for Testing.app/Contents',
-                '--version_number=' + Var('chrome'),
-    ],
-  },
-  {
-    'name': 'download_chrome_mac',
-    'pattern': '.',
-    'condition': 'host_os == "mac" and build_with_chromium == False and host_cpu == "arm64"',
-    'action': [ 'vpython3',
-                'scripts/deps/download_chrome.py',
-                '--url=https://storage.googleapis.com/chrome-for-testing-public/' + Var('chrome') + '/mac-arm64/chrome-mac-arm64.zip',
-                '--target=third_party/chrome',
-                '--rename_from=chrome-mac-arm64',
-                '--rename_to=chrome-mac',
-                '--path_to_binary=chrome-mac/Google Chrome for Testing.app/Contents',
-                '--version_number=' + Var('chrome'),
-    ],
-  },
-  {
-    'name': 'download_chrome_linux',
-    'pattern': '.',
-    'condition': 'host_os == "linux" and build_with_chromium == False',
-    'action': [ 'vpython3',
-                'scripts/deps/download_chrome.py',
-                '--url=https://storage.googleapis.com/chrome-for-testing-public/' + Var('chrome') + '/linux64/chrome-linux64.zip',
-                '--target=third_party/chrome',
-                '--rename_from=chrome-linux64',
-                '--rename_to=chrome-linux',
-                '--path_to_binary=chrome-linux/chrome',
-                '--version_number=' + Var('chrome'),
-    ],
-  },
-
   {
     # Update LASTCHANGE for build script timestamps
     'name': 'lastchange',
@@ -233,18 +171,7 @@ hooks = [
     'name': 'Patch LLDB to work with emscripten',
     'condition': 'checkout_cxx_debugging_extension_deps == True',
     'pattern': '.',
-    'action': ['git', 'apply', '--directory=extensions/cxx_debugging/third_party/llvm/src', 'extensions/cxx_debugging/llvm-lldb-SBFile-emscripten.patch'],
-  },
-  {
-    'name': 'VS Code settings',
-    'pattern': '.',
-    'condition': 'build_with_chromium == False',
-    'action': [
-      'node',
-      # Silence the "Importing JSON modules" warning
-      '--no-warnings=ExperimentalWarning',
-      'scripts/deps/sync-vscode-settings.mjs'
-    ]
+    'action': ['patch', '-p1', '--directory=extensions/cxx_debugging/third_party/llvm/src', '-i', '../../../llvm-lldb-SBFile-emscripten.patch'],
   },
 ]
 

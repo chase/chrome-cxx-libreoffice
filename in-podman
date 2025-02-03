@@ -1,0 +1,21 @@
+#!/bin/sh
+arch=$(uname -m)
+
+# Set build argument if ARM
+if [[ "$arch" == "arm64" || "$arch" == "aarch64" ]]; then
+  podman build -t chrome-cxx-libreoffice:0.0.1 --build-arg ARCH=-arm64 .
+else
+  podman build -t chrome-cxx-libreoffice:0.0.1 .
+fi
+mkdir -p .cache .npm .config .gsutil
+exec podman run \
+  --rm \
+  -it \
+  -v $(pwd):/app:Z \
+  -v $(pwd)/.cache:/.cache:Z \
+  -v $(pwd)/.npm:/.npm:Z \
+  -v $(pwd)/.config:/.config:Z \
+  -v $(pwd)/.gsutil:/.gsutil:Z \
+  -w /app \
+  chrome-cxx-libreoffice:0.0.1 \
+  bash

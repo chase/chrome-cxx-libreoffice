@@ -4,8 +4,7 @@ sync_workspace() {
   echo "[setup] Syncing gclient workspace"
   export PATH="$PWD/depot_tools:$PATH"
   export TAR_OPTIONS="--no-same-owner --no-same-permissions"
-  chmod -R 775 $PWD/third_party/node
-  export TEMPDIR=$(mktemp)
+  export TEMPDIR=$(mktemp -d)
   gclient sync --no-history -v -v
 }
 
