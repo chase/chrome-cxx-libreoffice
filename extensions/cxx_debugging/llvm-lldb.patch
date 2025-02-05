@@ -1,0 +1,66 @@
+diff --git a/lldb/include/lldb/API/SBFile.h b/lldb/include/lldb/API/SBFile.h
+index a8b16520332d..a5b84fe55fd3 100644
+--- a/lldb/include/lldb/API/SBFile.h
++++ b/lldb/include/lldb/API/SBFile.h
+@@ -11,6 +11,12 @@
+ 
+ #include "lldb/API/SBDefines.h"
+ 
++// Emscripten patch
++#ifndef FILE
++struct _IO_FILE;
++typedef struct _IO_FILE FILE;
++#endif
++
+ namespace lldb {
+ 
+ class LLDB_API SBFile {
+diff --git a/lldb/include/lldb/API/SBTypeCategory.h b/lldb/include/lldb/API/SBTypeCategory.h
+index ee1c0f6910ee..f85bd79eb313 100644
+--- a/lldb/include/lldb/API/SBTypeCategory.h
++++ b/lldb/include/lldb/API/SBTypeCategory.h
+@@ -95,11 +95,11 @@ public:
+ 
+   bool operator!=(lldb::SBTypeCategory &rhs);
+ 
++  lldb::TypeCategoryImplSP GetSP();
++
+ protected:
+   friend class SBDebugger;
+ 
+-  lldb::TypeCategoryImplSP GetSP();
+-
+   void SetSP(const lldb::TypeCategoryImplSP &typecategory_impl_sp);
+ 
+   TypeCategoryImplSP m_opaque_sp;
+diff --git a/lldb/source/Plugins/SymbolFile/DWARF/SymbolFileDWARF.cpp b/lldb/source/Plugins/SymbolFile/DWARF/SymbolFileDWARF.cpp
+index fef2a3638470..04b2906a5c20 100644
+--- a/lldb/source/Plugins/SymbolFile/DWARF/SymbolFileDWARF.cpp
++++ b/lldb/source/Plugins/SymbolFile/DWARF/SymbolFileDWARF.cpp
+@@ -86,7 +86,7 @@
+ #include <cctype>
+ #include <cstring>
+ 
+-//#define ENABLE_DEBUG_PRINTF // COMMENT OUT THIS LINE PRIOR TO CHECKIN
++// #define ENABLE_DEBUG_PRINTF // COMMENT OUT THIS LINE PRIOR TO CHECKIN
+ 
+ #ifdef ENABLE_DEBUG_PRINTF
+ #include <cstdio>
+@@ -1802,7 +1802,8 @@ SymbolFileDWARF::GetDwoSymbolFileForCompileUnit(
+   if (dwo_obj_file == nullptr) {
+     unit.SetDwoError(
+           Status("unable to load object file for .dwo debug file \"%s\" for "
+-                 "unit DIE 0x%8.8" PRIx32, dwo_name, cu_die.GetOffset()));
++               "unit DIE 0x%8.8" PRIx32,
++               dwo_name, cu_die.GetOffset()));
+     return nullptr;
+   }
+ 
+@@ -3435,6 +3436,7 @@ VariableSP SymbolFileDWARF::ParseVariableDIE(const SymbolContext &sc,
+         location_DW_OP_addr = location->GetLocation_DW_OP_addr(
+             location_form.GetUnit(), 0, op_error);
+       if (op_error) {
++        return nullptr;
+         StreamString strm;
+         location->DumpLocation(&strm, eDescriptionLevelFull, nullptr);
+         GetObjectFile()->GetModule()->ReportError(

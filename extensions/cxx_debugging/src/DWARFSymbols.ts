@@ -334,19 +334,16 @@ export class DWARFLanguageExtensionPlugin implements Chrome.DevTools.LanguageExt
         return {
           type,
           typeName: 'Global',
-          icon: 'data:null',
         };
       case 'LOCAL':
         return {
           type,
           typeName: 'Local',
-          icon: 'data:null',
         };
       case 'PARAMETER':
         return {
           type,
           typeName: 'Parameter',
-          icon: 'data:null',
         };
     }
     throw new Error(`InternalError: Invalid scope type '${type}`);

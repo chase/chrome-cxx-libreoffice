@@ -421,6 +421,14 @@ llvm::Expected<std::vector<api::TypeInfo>> ApiContext::GetApiTypeInfos(
       continue;
     }
 
+    auto num_args = type.GetNumTemplateArguments(true);
+    for (size_t i = 0; i < num_args; ++i) {
+      auto arg = type.GetTypeTemplateArgument(i);
+      if (!visited_types.contains(arg.GetOpaqueQualType())) {
+        queue.push_back({arg, depth + 1});
+      }
+    } 
+
     auto member_info = SubObjectInfo::GetMembers(type);
     for (const auto& member : member_info) {
       if (!visited_types.contains(member.Type().GetOpaqueQualType())) {

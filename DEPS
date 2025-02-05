@@ -171,7 +171,7 @@ hooks = [
     'name': 'Patch LLDB to work with emscripten',
     'condition': 'checkout_cxx_debugging_extension_deps == True',
     'pattern': '.',
-    'action': ['patch', '-p1', '--directory=extensions/cxx_debugging/third_party/llvm/src', '-i', '../../../llvm-lldb-SBFile-emscripten.patch'],
+    'action': ['patch', '-p1', '--directory=extensions/cxx_debugging/third_party/llvm/src', '-i', '../../../llvm-lldb.patch'],
   },
 ]
 

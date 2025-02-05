@@ -56,6 +56,8 @@ export interface Value {
   asDataView: (offset?: number, size?: number) => DataView;
   $: (member: string|number) => Value;
   getMembers(): string[];
+  castTo(typeName: string): Value;
+  castChildAtIndexTo(index: number, typeName: string): Value;
 }
 
 export class MemorySlice {
@@ -247,6 +249,8 @@ export class WasmMemoryView {
   }
 }
 
+const globalTypeMap = new Map<string, TypeInfo>();
+
 export class CXXValue implements Value, LazyObject {
   readonly location: number;
   private readonly type: TypeInfo;
@@ -294,6 +298,12 @@ export class CXXValue implements Value, LazyObject {
     const typeMap = new Map();
     for (const info of typeInfo.typeInfos) {
       typeMap.set(info.typeId, info);
+      for (const name of info.typeNames) {
+        if (name.endsWith("::XInteractionHandler2")) {
+          console.log(name, info);
+        }
+        globalTypeMap.set(name, info);
+      }
     }
     const {location, root, data, displayValue, memoryAddress} = typeInfo;
     return new CXXValue(objectStore, wasm, memoryView, location ?? 0, root, typeMap, data, displayValue, memoryAddress);
@@ -457,6 +467,37 @@ export class CXXValue implements Value, LazyObject {
 
   getMembers(): string[] {
     return Array.from(this.members.keys());
+  }
+
+  castTo(typeName: string): CXXValue {
+    const targetType = globalTypeMap.get(typeName);
+
+    if (!targetType) {
+      throw new Error(`Type '${typeName}' not found in type information`);
+    }
+
+    return new CXXValue(
+      this.objectStore,
+      this.wasm,
+      this.memoryView,
+      this.location,
+      targetType,
+      this.typeMap,
+      this.data,
+      this.displayValue,
+      this.memoryAddress
+    );
+  }
+
+  castChildAtIndexTo(index: number, typeName: string): CXXValue {
+    const targetType = globalTypeMap.get(typeName);
+
+    if (!targetType) {
+      throw new Error(`Type '${typeName}' not found in type information`);
+    }
+    const ptr = this.location + index * targetType.size;
+
+    return new CXXValue(this.objectStore, this.wasm, this.memoryView, ptr, targetType, this.typeMap);
   }
 }
 

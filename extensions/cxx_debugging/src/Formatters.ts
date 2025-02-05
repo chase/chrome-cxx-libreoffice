@@ -4,6 +4,7 @@
 
 import {
   CustomFormatters,
+  FormatterResult,
   type LazyObject,
   PrimitiveLazyObject,
   type TypeInfo,
@@ -217,7 +218,7 @@ function formatStringBuffer(
   encoding: string = "utf-8",
   bytesPerChar: number = 1,
 ): LLDBString {
-  if (!buffer || length === 0) {
+  if (!buffer || buffer.asUint32() === 0 || length === 0) {
     return "";
   }
 
@@ -343,21 +344,26 @@ const enum TypeClass {
   SINGLETON = 31,
 }
 
+const PRIMITIVE_TO_RESULT_VIEW: Record<number, (value: Value, wasm: WasmInterface) => FormatterResult> = {
+  [TypeClass.CHAR]: (value) => String.fromCharCode(value.asInt8()),
+  [TypeClass.BOOLEAN]: (value) => value.asUint8() !== 0,
+  [TypeClass.BYTE]: (value) => String.fromCharCode(value.asUint8()),
+  [TypeClass.SHORT]: (value) => value.asInt16(),
+  [TypeClass.UNSIGNED_SHORT]: (value) => value.asUint16(),
+  [TypeClass.LONG]: (value) => value.asInt32(),
+  [TypeClass.UNSIGNED_LONG]: (value) => value.asUint32(),
+  [TypeClass.HYPER]: (value) => value.asInt64(),
+  [TypeClass.UNSIGNED_HYPER]: (value) => value.asUint64(),
+  [TypeClass.FLOAT]: (value) => value.asFloat32(),
+  [TypeClass.DOUBLE]: (value) => value.asFloat64(),
+  [TypeClass.STRING]: (value, wasm) => {
+    const strValue = value.castTo("rtl::OUString");
+    return formatRTLOUString(wasm, strValue);
+  },
+};
+
 // Mapping primitive UNO types to C++ types
 const PRIMITIVE_TO_CPP: Record<number, string> = {
-  [TypeClass.VOID]: "void",
-  [TypeClass.CHAR]: "char",
-  [TypeClass.BOOLEAN]: "sal_Bool",
-  [TypeClass.BYTE]: "sal_Int8",
-  [TypeClass.SHORT]: "sal_Int16",
-  [TypeClass.UNSIGNED_SHORT]: "sal_uInt16",
-  [TypeClass.LONG]: "sal_Int32",
-  [TypeClass.UNSIGNED_LONG]: "sal_uInt32",
-  [TypeClass.HYPER]: "sal_Int64",
-  [TypeClass.UNSIGNED_HYPER]: "sal_uInt64",
-  [TypeClass.FLOAT]: "float",
-  [TypeClass.DOUBLE]: "double",
-  [TypeClass.STRING]: "rtl::OUString",
   [TypeClass.TYPE]: "com::sun::star::uno::Type",
   [TypeClass.ANY]: "com::sun::star::uno::Any",
 };
@@ -400,10 +406,10 @@ const unresolved_type_cache = new Set<number>();
 const resolved_type_cache = new Map<number, TypeEntry>();
 
 function unoToCpp(uno: string): string {
-  return uno.replace(/\./g, "::").slice(1, -1);
+  return uno.replace(/\./g, "::");
 }
 
-function resolveUnoType(value: Value): TypeEntry | undefined {
+function resolveUnoType(value: Value, wasm: WasmInterface): TypeEntry | undefined {
   const address = value.location;
   if (unresolved_type_cache.has(address)) {
     return undefined;
@@ -414,7 +420,7 @@ function resolveUnoType(value: Value): TypeEntry | undefined {
   }
 
   let val = value;
-  const typeNames = value.typeNames;
+  let typeNames = value.typeNames;
 
   if (typeNames.includes(CSSU_TYPE)) {
     const pValue = value.$("_pType");
@@ -431,6 +437,7 @@ function resolveUnoType(value: Value): TypeEntry | undefined {
       return undefined;
     }
     val = pValue.$("*");
+    typeNames = val.typeNames;
   }
 
   if (!val.typeNames.some((name) => TYPE_DESCS.has(name))) {
@@ -446,12 +453,13 @@ function resolveUnoType(value: Value): TypeEntry | undefined {
   }
 
   const typeClass = val.$("eTypeClass").asUint32();
-  const name = val.$("pTypeName").asInt32(); // Assuming this is how we get the type name
+  const nameRef = val.$("pTypeName").$("*");
+  const nameString = formatRTLUString(wasm, nameRef) as string;
 
   if (typeClass in PRIMITIVE_TO_CPP) {
     const entry = new TypeEntry(
       typeClass,
-      name.toString(),
+      nameString,
       PRIMITIVE_TO_CPP[typeClass],
     );
     resolved_type_cache.set(address, entry);
@@ -459,8 +467,8 @@ function resolveUnoType(value: Value): TypeEntry | undefined {
   } else if (UNO_TO_CPP.has(typeClass)) {
     const entry = new TypeEntry(
       typeClass,
-      name.toString(),
-      unoToCpp(name.toString()),
+      nameString,
+      unoToCpp(nameString),
     );
     resolved_type_cache.set(address, entry);
     return entry;
@@ -468,10 +476,10 @@ function resolveUnoType(value: Value): TypeEntry | undefined {
     typeClass === TypeClass.INTERFACE_ATTRIBUTE ||
     typeClass === TypeClass.INTERFACE_METHOD
   ) {
-    const [interface_, , member] = name.toString().split("::");
+    const [interface_, , member] = nameString.split("::");
     const entry = new TypeEntry(
       typeClass,
-      name.toString(),
+      nameString,
       `${unoToCpp(interface_)}::*${member}`,
     );
     resolved_type_cache.set(address, entry);
@@ -483,7 +491,7 @@ function resolveUnoType(value: Value): TypeEntry | undefined {
       return undefined;
     }
 
-    const elem = resolveUnoType(pElem);
+    const elem = resolveUnoType(pElem, wasm);
     if (!elem) {
       unresolved_type_cache.add(address);
       return undefined;
@@ -491,7 +499,7 @@ function resolveUnoType(value: Value): TypeEntry | undefined {
 
     const entry = new TypeEntry(
       typeClass,
-      name.toString(),
+      nameString,
       `com::sun::star::uno::Sequence<${elem.cpp_type}>`,
       elem,
     );
@@ -503,19 +511,22 @@ function resolveUnoType(value: Value): TypeEntry | undefined {
   return undefined;
 }
 
-function formatUnoAny(wasm: WasmInterface, value: Value): Value | undefined {
+function formatUnoAny(wasm: WasmInterface, value: Value): FormatterResult {
+  try {
   const typeDesc = value.$("pType");
   if (!typeDesc) {
     return undefined;
   }
 
-  const type = resolveUnoType(typeDesc.$("*"));
-  if (!type) {
+  const typeClass = typeDesc.$("*").$("eTypeClass").asUint32();
+  if (typeClass in PRIMITIVE_TO_RESULT_VIEW) {
+    return PRIMITIVE_TO_RESULT_VIEW[typeClass](value.$("pData").$("*"), wasm);
+  } else if (typeClass === TypeClass.VOID) {
     return undefined;
   }
 
-  const typeClass = typeDesc.$("*").$("eTypeClass").asUint32();
-  if (typeClass === TypeClass.VOID) {
+  const type = resolveUnoType(typeDesc.$("*"), wasm);
+  if (!type) {
     return undefined;
   }
 
@@ -523,8 +534,16 @@ function formatUnoAny(wasm: WasmInterface, value: Value): Value | undefined {
   if (!ptr) {
     return undefined;
   }
+  return ptr.castChildAtIndexTo(0, type.cpp_type);
 
-  return ptr.$(`*(${type.cpp_type})`);
+  } catch (e) {
+    console.error(e);
+    return undefined;
+  }
+}
+
+function unwrapTemplateTypeName(typeName: string): string {
+  return typeName.replace(/^.*<([^>]+)>$/, '$1');
 }
 
 function formatUnoReference(
@@ -536,7 +555,7 @@ function formatUnoReference(
     return undefined;
   }
 
-  return iface.$("*");
+  return iface.$("*").castTo(unwrapTemplateTypeName(value.typeNames[0]));
 }
 
 function formatUnoSequence(wasm: WasmInterface, value: Value): Value[] {
@@ -572,7 +591,7 @@ function formatUnoSequencePropertyValue(
 
   const result: Record<string, Value> = {};
   for (let i = 0; i < size; i++) {
-    const el = elements.$(i);
+    const el = elements.castChildAtIndexTo(i, "com::sun::star::beans::PropertyValue");
     const nameRef = el.$("Name").$("pData").$("*");
     const nameString = formatRTLStringBase(
       wasm,
@@ -587,7 +606,7 @@ function formatUnoSequencePropertyValue(
 }
 
 function formatUnoType(wasm: WasmInterface, value: Value): Value | undefined {
-  return resolveUnoType(value) ? value : undefined;
+  return resolveUnoType(value, wasm) ? value : undefined;
 }
 
 // Register formatters
