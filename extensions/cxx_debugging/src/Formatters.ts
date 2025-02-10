@@ -569,8 +569,9 @@ function formatUnoSequence(wasm: WasmInterface, value: Value): Value[] {
   const elements = impl.$("elements");
 
   const result: Value[] = [];
+  const typeName = unwrapTemplateTypeName(value.typeNames[0]);
   for (let i = 0; i < size; i++) {
-    result.push(elements.$(i));
+    result.push(elements.castChildAtIndexTo(i, typeName));
   }
 
   return result;
